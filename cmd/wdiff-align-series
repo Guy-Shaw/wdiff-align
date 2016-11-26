@@ -1,0 +1,234 @@
+#! /usr/bin/perl
+
+=pod
+
+=begin description
+
+Treat the lines of input as a series of chnages, from one line to the next.
+For each pair of lines, run wdiff and show the resulting difference as
+horizontally aligned defore and after pairs.
+
+
+=end description
+
+=cut
+
+require 5.0;
+use strict;
+use warnings;
+use Carp;
+use diagnostics;
+use Getopt::Long;
+use File::Spec::Functions;
+use Cwd qw(getcwd);             # Needed at least for explain_cwd()
+
+my $eprint_fh;
+my $dprint_fh;
+
+my $debug   = 0;
+my $verbose = 0;
+
+my $path_wdiff_align;
+
+my $standard_wdiff = 0;
+
+my @options = (
+    'debug'   => \$debug,
+    'verbose' => \$verbose,
+);
+
+#:subroutines:#
+
+# Decide how to direct eprint*() and dprint*() functions.
+# If STDOUT and STDERR are directed to the same "channel",
+# then eprint*() and dprint*() should be tied to the same file handle.
+#
+# Otherwise, buffering could cause a mix of STDOUT and STDERR to
+# be written out of order.
+#
+sub set_print_fh {
+    my @stdout_statv;
+    my @stderr_statv;
+    my $stdout_chan;
+    my $stderr_chan;
+
+    @stdout_statv = stat(*STDOUT);
+    @stderr_statv = stat(*STDERR);
+    $stdout_chan = join(':', @stdout_statv[0, 1, 6]);
+    $stderr_chan = join(':', @stderr_statv[0, 1, 6]);
+    if (!defined($eprint_fh)) {
+        $eprint_fh = ($stderr_chan eq $stdout_chan) ? *STDOUT : *STDERR;
+    }
+    if (!defined($dprint_fh)) {
+        $dprint_fh = ($stderr_chan eq $stdout_chan) ? *STDOUT : *STDERR;
+    }
+}
+
+sub eprint {
+    if (-t $eprint_fh) {
+        print {$eprint_fh} "\e[01;31m\e[K", @_, "\e[m\e[K";
+    }
+    else {
+        print {$eprint_fh} @_;
+    }
+}
+
+sub eprintf {
+    if (-t $eprint_fh) {
+        print  {$eprint_fh}  "\e[01;31m\e[K";
+        printf {$eprint_fh} @_;
+        print  {$eprint_fh}  "\e[m\e[K";
+    }
+    else {
+        printf {$eprint_fh} @_;
+    }
+}
+
+sub dprint {
+    print {$dprint_fh} @_ if ($debug);
+}
+
+sub dprintf {
+    printf {$dprint_fh} @_ if ($debug);
+}
+
+sub write_to_tmpfile {
+    my $tmp_fname = shift;
+    my $fh;
+
+    if (!open($fh, '>', $tmp_fname)) {
+        eprint "open('${tmp_fname}') failed; $!\n";
+        exit 2;
+    }
+
+    for (@_) {
+        print {$fh} $_, "\n";
+    }
+    close $fh;
+
+    if (! -f $tmp_fname) {
+        eprint "New temporary file, '${tmp_fname}', does not exist.\n";
+        exit 2;
+    }
+}
+
+sub hex_encode_line {
+    my ($line) = @_;
+
+    my @C = split(//, $line);
+    my @X = map { sprintf("%x", ord($_)); } @C;
+    return join(' ', @X);
+}
+
+#:options:#
+
+set_print_fh();
+
+GetOptions(@options) or exit 2;
+
+#:main:#
+
+if (-x './wdiff-align') {
+    $path_wdiff_align = './wdiff-align';
+}
+elsif (-x '../wdiff-align') {
+    $path_wdiff_align = '../wdiff-align';
+}
+else {
+    $path_wdiff_align = 'wdiff-align';
+}
+
+my $tmpdir = 'tmp';
+
+my $tmpf1 = catfile($tmpdir, '01-line1');
+my $tmpf2 = catfile($tmpdir, '02-line2');
+my $tmpf3 = catfile($tmpdir, '03-wdiff-hex');
+my $tmpf4 = catfile($tmpdir, '04-wdiff-text');
+
+my @wdiff_cmdv;
+
+if ($standard_wdiff) {
+    @wdiff_cmdv = (
+        '/usr/bin/wdiff',
+        $tmpf1,
+        $tmpf2,
+    );
+}
+else {
+    @wdiff_cmdv = (
+        '/usr/bin/wdiff',
+        '--start-insert='  . "\x1c",
+        '--end-insert='    . "\x1d",
+        '--start-delete='  . "\x1e",
+        '--end-delete='    . "\x1f",
+        $tmpf1,
+        $tmpf2,
+    );
+}
+
+if (! -e $tmpdir) {
+    mkdir($tmpdir);
+}
+
+if (! -e $tmpdir) {
+    eprint "Temporary directory, '${tmpdir}' does not exist.\n";
+    exit 2;
+}
+if (! -d $tmpdir) {
+    eprint "Temporary directory, '${tmpdir}' is not a directory.\n";
+    system('ls', '-dlh', $tmpdir);
+    exit 2;
+}
+
+
+my $prev_line = '';
+my $ndiffs = 0;
+while (<>) {
+    chomp;
+    s{\r\z}{}msx;
+    $_ = hex_encode_line($_);
+    if ($prev_line ne '') {
+        my $child;
+        if ($ndiffs) {
+            print "\n\n";
+        }
+        write_to_tmpfile($tmpf1, $prev_line);
+        write_to_tmpfile($tmpf2, $_);
+        my $wfh;
+        my $wdiff_line;
+        $child = open($wfh, '-|', @wdiff_cmdv);
+        if ($child) {
+            $wdiff_line = <$wfh>;
+            chomp $wdiff_line;
+            close $wfh;
+        }
+
+        if ($debug) {
+            write_to_tmpfile($tmpf3, $wdiff_line);
+        }
+
+        $wdiff_line =~ s{\s*\b([\da-f][\da-f]?)\b\s*}{chr(hex($1))}egmsx;
+
+        if ($debug) {
+            write_to_tmpfile($tmpf4, $wdiff_line);
+        }
+
+        my $afh;
+        $child = open($afh, '|-', $path_wdiff_align, '--midline');
+        if ($child) {
+            print {$afh}  $wdiff_line, "\n";
+            close $afh;
+        }
+        ++$ndiffs;
+    }
+    $prev_line = $_;
+}
+
+unless ($debug) {
+    unlink($tmpf1);
+    unlink($tmpf2);
+    unlink($tmpf3);
+    unlink($tmpf4);
+}
+
+exit 0;

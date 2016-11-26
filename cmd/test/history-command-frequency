@@ -1,0 +1,8 @@
+if (m{\A([A-Za-z]\S+)\s}msx) { $cmds{$1} = 1; } }
+if (m{\A\s\s\s\s([A-Za-z]\S+)\s}msx) { $cmds{$1} = 1; } }
+if (m{\A\s\s\s\s([A-Za-z]\S+)\s}msx) { $cmd = $1; next if ($cmd =~ m{=}msx); next if ($cmd =~ m{\(}msx; ++$cmds{$1}; } }
+if (m{\A\s\s\s\s([A-Za-z]\S+)\s}msx) { $cmd = $1; next if ($cmd =~ m{=}msx); next if ($cmd =~ m{\(}msx); ++$cmds{$cmd}; } }
+if (m{\A\s\s\s\ssudo\s+([A-Za-z]\S+)\s}msx) { $cmd = $1; next if ($cmd =~ m{=}msx); next if ($cmd =~ m{\(}msx); ++$cmds{$cmd}; } }
+if (m{\A\s\s\s\s(?:sudo\s+)([A-Za-z]\S+)\s}msx) { $cmd = $1; next if ($cmd =~ m{=}msx); next if ($cmd =~ m{\(}msx); ++$cmds{$cmd}; } }
+if (m{\A\s\s\s\s(?:sudo\s+)?([A-Za-z]\S+)\s}msx) { $cmd = $1; next if ($cmd =~ m{=}msx); next if ($cmd =~ m{\(}msx); ++$cmds{$cmd}; } }
+if (m{\A\s\s\s\s(?:sudo\s+)?(\./[A-Za-z]\S+)\s}msx) { $cmd = $1; next if ($cmd =~ m{=}msx); next if ($cmd =~ m{\(}msx); ++$cmds{$cmd}; } }
