@@ -50,7 +50,7 @@ clean-cmd:
 clean: clean-test clean-cmd
 
 mcc:
-	mcc --mcc:all --mcc:header $(CFLAGS) -c -- $(SRC_C)
+	mcc --mcc:header $(CFLAGS) -c -- $(SRCS)
 
 show-targets:
 	@show-makefile-targets

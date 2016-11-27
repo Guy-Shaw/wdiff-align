@@ -1,3 +1,25 @@
+/*
+ * Filename: src/cmd/wdiff-align.c
+ * Project: wdiff-align
+ * Brief: wdiff-align core logic, separate from main driver program
+ *
+ * Copyright (C) 2016 Guy Shaw
+ * Written by Guy Shaw <gshaw@acm.org>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation; either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <stdbool.h>
     // Import type bool
     // Import constant false
@@ -50,6 +72,35 @@ static syntax_t syntax_tbl[] = {
 
 #endif
 
+/*
+ * Get a single Super-Unicode character.
+ *
+ * Super-Unicode is a fictitious character set that includes extra
+ * wide characters that cannot appear in ordinary Unicode, and can
+ * safely be used to represent our own super-characters, such as
+ * {start of insert, end of insert, start of delete, end of delete}.
+ *
+ * These super-characters cannot occur in the input file.
+ * They must be represented by some sequence of characters.
+ *
+ * Here, we translate those input sequences to super-characters,
+ * so that all other program logic need not deal with multi-byte
+ * sequences.
+ *
+ * If an input byte is the start of a multi-byte sequence, then
+ * more bytes are read from the input.  If a complete multi-byte
+ * sequence is matched, then the corresponding super-character
+ * is returned.  Since, the syntax table can have more than one
+ * mutli-byte seqence with the same prefix, bytes must be read
+ * until an unambiguous match is found, or until we know that the
+ * partial sequence cannot match any super-character, in which case
+ * an ordinary character is returned, and the input cursor is advanced
+ * by only one character.
+ *
+ * This is functionally equivalent to an fgrep-like finte automaton
+ * that is limitied to mathing a list of fixed strings.
+ *
+ */
 static int
 get_su_char(FILE *srcf)
 {
