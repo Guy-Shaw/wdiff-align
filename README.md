@@ -60,6 +60,22 @@ It breaks up its input into pairs of "before" and "after" lines.
 The "after" line of one pair becomes the "before" line of the
 next pair.  Each pair is fed to `wdiff-align`.
 
+### Options to `wdiff-align-series`
+
+--ltrim
+
+--rtrim
+
+--trim
+
+It is a common enough case that there is a long run of content
+that is equal at the beginning of each line (before the complications begin),
+at the end of each line, or both.
+The option, `--ltrim` causes a long prefix to be replaced by an elipis;
+`--rtrim` elides a long common suffix;
+`--trim` does both.
+
+
 ## Why
 
 The original motivation for creating `wdiff-align`
