@@ -35,7 +35,7 @@ Hello       |
 Hello World.|
 ```
 
-by sending the output if `wdiff` with the apprpriate options
+by sending the output if `wdiff` with the appropriate options
 to `wdiff-align`.
 
 This does not look like it is much easier to read
@@ -71,7 +71,7 @@ next pair.  Each pair is fed to `wdiff-align`.
 It is a common enough case that there is a long run of content
 that is equal at the beginning of each line (before the complications begin),
 at the end of each line, or both.
-The option, `--ltrim` causes a long prefix to be replaced by an elipis;
+The option, `--ltrim` causes a long prefix to be replaced by an ellipis;
 `--rtrim` elides a long common suffix;
 `--trim` does both.
 
