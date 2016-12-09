@@ -25,11 +25,23 @@ all: test
 test:
 	@echo "Test: hello -> hello world"
 	@echo
-	(cd .. && ./wdiff-align-series < test/hello )
+	wdiff hello1 hello2 | ../wdiff-align -m
+	@echo
+	@echo Same, but using wdiff-align-series
+	@echo
+	cat hello1 hello2 | ../wdiff-align-series
 	@echo
 	@echo "Test: command frequency from shell history"
 	@echo
-	(cd .. && ./wdiff-align-series < test/history-command-frequency )
+	../wdiff-align-series < history-command-frequency
+	@echo
+	@echo "Test: similar bookmarklets -- nav/up-dir vs nav/up-dir-new-tab"
+	@echo
+	../wdiff-align-series < bookmarklets
+	@echo
+	@echo "Test: similar bookmarklets.  Same as above, but with --trim option."
+	@echo
+	../wdiff-align-series --trim < bookmarklets
 
 clean:
 	rm -rf tmp

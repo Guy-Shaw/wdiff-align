@@ -48,6 +48,9 @@ my $dprint_fh;
 
 my $debug   = 0;
 my $verbose = 0;
+my $trim    = 0;
+my $ltrim   = 0;
+my $rtrim   = 0;
 
 my $path_wdiff_align;
 
@@ -56,6 +59,9 @@ my $standard_wdiff = 0;
 my @options = (
     'debug'   => \$debug,
     'verbose' => \$verbose,
+    'trim'    => \$trim,
+    'ltrim'   => \$ltrim,
+    'rtrim'   => \$rtrim,
 );
 
 #:subroutines:#
@@ -133,12 +139,115 @@ sub write_to_tmpfile {
     }
 }
 
-sub hex_encode_line {
+sub word_encode_line {
     my ($line) = @_;
+    my @ncode = ();
+    my $pfx;
+    my $lpfx;
 
-    my @C = split(//, $line);
-    my @X = map { sprintf("%x", ord($_)); } @C;
-    return join(' ', @X);
+    while ($line ne '') {
+        if ($line =~ m{\A(\x20+)}msx) {
+            $pfx = $1;
+            $lpfx = length($pfx);
+            push(@ncode, 'S' . $lpfx);
+            $line = substr($line, $lpfx);
+        }
+        elsif ($line =~ m{\A(\w+)}msx) {
+            $pfx = $1;
+            $lpfx = length($pfx);
+            push(@ncode, 'W' . $pfx);
+            $line = substr($line, $lpfx);
+        }
+        else {
+            $pfx = substr($line, 0, 1);
+            $lpfx = length($pfx);
+            push(@ncode, sprintf("%x", ord($pfx)));
+            $line = substr($line, 1);
+        }
+    }
+
+    return join(' ', @ncode);
+}
+
+sub word_decode_line {
+    my ($line) = @_;
+    my $dcode = '';
+    $line =~ s{([\x1c-\x1f])}{\x20$1\x20}gmsx;
+    for my $w (split(/\s+/, $line)) {
+        next if ($w eq '');
+        if ($w =~ m{\A[\x1c-\x1f]\z}msx) {
+            $dcode .= $w;
+        }
+        elsif (substr($w, 0, 1) eq 'W') {
+            $dcode .= substr($w, 1);
+        }
+        elsif ($w =~ m{\AS(\d+)\z}msx) {
+            $dcode .= ' ' x $1;
+        }
+        elsif ($w =~ m{\A[\da-f][\da-f]?\z}msx) {
+            $dcode .= chr(hex($w));
+        }
+        elsif ($w =~ m{\A[\dA-F][\dA-F]?\z}msx) {
+            $dcode .= chr(hex($w));
+        }
+        elsif ($w eq 'ElideLeft') {
+            $dcode .= '... ';
+        }
+        elsif ($w eq 'ElideRight') {
+            $dcode .= ' ...';
+        }
+        else {
+            $dcode .= sprintf('*** [%s] ***', $w);
+        }
+    }
+
+    return $dcode;
+}
+
+sub ltrim_encoded_line {
+    my ($line1, $line2) = @_;
+    my @a1 = split(/\s+/, $line1);
+    my @a2 = split(/\s+/, $line2);
+    my @e1 = @a1;
+    my @e2 = @a2;
+    my $elide = 0;
+    while ($e1[0] eq $e2[0]) {
+        $elide += length($e1[0]);
+        shift(@e1);
+        shift(@e2);
+    }
+    if ($elide > 10) {
+        unshift(@e1, 'ElideLeft');
+        unshift(@e2, 'ElideLeft');
+        @a1 = @e1;
+        @a2 = @e2;
+    }
+    my $r1 = join(' ', @a1);
+    my $r2 = join(' ', @a2);
+    return ($r1, $r2);
+}
+
+sub rtrim_encoded_line {
+    my ($line1, $line2) = @_;
+    my @a1 = split(/\s+/, $line1);
+    my @a2 = split(/\s+/, $line2);
+    my @e1 = @a1;
+    my @e2 = @a2;
+    my $elide = 0;
+    while ($e1[$#e1] eq $e2[$#e2]) {
+        $elide += length($e1[0]);
+        pop(@e1);
+        pop(@e2);
+    }
+    if ($elide > 10) {
+        push(@e1, 'ElideRight');
+        push(@e2, 'ElideRight');
+        @a1 = @e1;
+        @a2 = @e2;
+    }
+    my $r1 = join(' ', @a1);
+    my $r2 = join(' ', @a2);
+    return ($r1, $r2);
 }
 
 #:options:#
@@ -147,24 +256,50 @@ set_print_fh();
 
 GetOptions(@options) or exit 2;
 
+if ($trim) {
+    $ltrim = 1;
+    $rtrim = 1;
+}
+
 #:main:#
 
-if (-x './wdiff-align') {
-    $path_wdiff_align = './wdiff-align';
-}
-elsif (-x '../wdiff-align') {
-    $path_wdiff_align = '../wdiff-align';
+my $tmpdir;
+my $tmpf1;
+my $tmpf2;
+my $tmpf3;
+my $tmpf4;
+
+if ($debug) {
+    if (-x './wdiff-align') {
+        $path_wdiff_align = './wdiff-align';
+    }
+    elsif (-x '../wdiff-align') {
+        $path_wdiff_align = '../wdiff-align';
+    }
+    else {
+        $path_wdiff_align = 'wdiff-align';
+    }
+
+    $tmpdir = 'tmp';
+
+    if (! -e $tmpdir) {
+        mkdir($tmpdir);
+    }
+
+    $tmpf1 = catfile($tmpdir, '01-line1');
+    $tmpf2 = catfile($tmpdir, '02-line2');
+    $tmpf3 = catfile($tmpdir, '03-wdiff-hex');
+    $tmpf4 = catfile($tmpdir, '04-wdiff-text');
 }
 else {
     $path_wdiff_align = 'wdiff-align';
+    $tmpdir = '/var/tmp';
+    my $tmp_pfx = catfile($tmpdir, 'wdiff-' . $$ . '-');
+    $tmpf1 = $tmp_pfx . '01-line1';
+    $tmpf2 = $tmp_pfx . '02-line2';
+    $tmpf3 = $tmp_pfx . '03-wdiff-hex';
+    $tmpf4 = $tmp_pfx . '04-wdiff-text';
 }
-
-my $tmpdir = 'tmp';
-
-my $tmpf1 = catfile($tmpdir, '01-line1');
-my $tmpf2 = catfile($tmpdir, '02-line2');
-my $tmpf3 = catfile($tmpdir, '03-wdiff-hex');
-my $tmpf4 = catfile($tmpdir, '04-wdiff-text');
 
 my @wdiff_cmdv;
 
@@ -188,10 +323,6 @@ else {
 }
 
 if (! -e $tmpdir) {
-    mkdir($tmpdir);
-}
-
-if (! -e $tmpdir) {
     eprint "Temporary directory, '${tmpdir}' does not exist.\n";
     exit 2;
 }
@@ -207,14 +338,23 @@ my $ndiffs = 0;
 while (<>) {
     chomp;
     s{\r\z}{}msx;
-    $_ = hex_encode_line($_);
+    my $line = word_encode_line($_);
     if ($prev_line ne '') {
         my $child;
         if ($ndiffs) {
             print "\n\n";
         }
-        write_to_tmpfile($tmpf1, $prev_line);
-        write_to_tmpfile($tmpf2, $_);
+
+        my $line1 = $prev_line;
+        my $line2 = $line;
+        if ($ltrim) {
+            ($line1, $line2) = ltrim_encoded_line($line1, $line2);
+        }
+        if ($rtrim) {
+            ($line1, $line2) = rtrim_encoded_line($line1, $line2);
+        }
+        write_to_tmpfile($tmpf1, $line1);
+        write_to_tmpfile($tmpf2, $line2);
         my $wfh;
         my $wdiff_line;
         $child = open($wfh, '-|', @wdiff_cmdv);
@@ -228,21 +368,21 @@ while (<>) {
             write_to_tmpfile($tmpf3, $wdiff_line);
         }
 
-        $wdiff_line =~ s{\s*\b([\da-f][\da-f]?)\b\s*}{chr(hex($1))}egmsx;
+        $wdiff_line = word_decode_line($wdiff_line);
 
         if ($debug) {
             write_to_tmpfile($tmpf4, $wdiff_line);
         }
 
         my $afh;
-        $child = open($afh, '|-', $path_wdiff_align, '--midline');
+        $child = open($afh, '|-', $path_wdiff_align, '--ctrl', '--midline');
         if ($child) {
             print {$afh}  $wdiff_line, "\n";
             close $afh;
         }
         ++$ndiffs;
     }
-    $prev_line = $_;
+    $prev_line = $line;
 }
 
 unless ($debug) {

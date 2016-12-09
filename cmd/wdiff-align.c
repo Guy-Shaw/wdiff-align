@@ -52,25 +52,19 @@ struct syntax {
 
 typedef struct syntax syntax_t;
 
-#ifdef STANDARD_WDIFF
-
-static syntax_t syntax_tbl[] = {
+static syntax_t syntax_tbl_std[] = {
     { "{+", insert_start },
     { "+}", insert_end   },
     { "[-", delete_start },
     { "-]", delete_end   },
 };
 
-#else
-
-static syntax_t syntax_tbl[] = {
+static syntax_t syntax_tbl_ctrl[] = {
     { "\x1c", insert_start },
     { "\x1d", insert_end   },
     { "\x1e", delete_start },
     { "\x1f", delete_end   },
 };
-
-#endif
 
 /*
  * Get a single Super-Unicode character.
@@ -102,7 +96,7 @@ static syntax_t syntax_tbl[] = {
  *
  */
 static int
-get_su_char(FILE *srcf)
+get_su_char(FILE *srcf, syntax_t *syntax_tbl)
 {
     static char ungetbuf[16];
     static char sbuf[16];
@@ -188,7 +182,7 @@ test_get_su_char(FILE *srcf, FILE *dstf)
     while (true) {
         int c;
 
-        c = get_su_char(srcf);
+        c = get_su_char(srcf, &syntax_tbl_std[0]);
         if (c == EOF) {
             return (0);
         }
@@ -231,7 +225,7 @@ switch_color(FILE *dstf, int prev_lc, int lc, int lnr)
 }
 
 void
-wdiff_align(FILE *srcf, FILE *dstf, bool color, bool show_midline)
+wdiff_align(FILE *srcf, FILE *dstf, bool ctrl, bool color, bool show_midline)
 {
     static char l1buf[1024];
     static char l2buf[1024];
@@ -240,10 +234,13 @@ wdiff_align(FILE *srcf, FILE *dstf, bool color, bool show_midline)
     int c;
     bool in_insert = false;
     bool in_delete = false;
+    syntax_t *syntax_tbl;
+
+    syntax_tbl = ctrl ? syntax_tbl_ctrl : syntax_tbl_std;
 
     pos = 0;
     while (true) {
-        c = get_su_char(srcf);
+        c = get_su_char(srcf, syntax_tbl);
         if (c == '\r' || c == '\n' || (c == EOF && pos != 0)) {
             /*
              * At the end of an input line, three display lines have been

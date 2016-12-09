@@ -53,7 +53,7 @@
 
 #include <cscript.h>
 
-extern char wdiff_align(FILE *srcf, FILE *dstf, bool color, bool mid);
+extern char wdiff_align(FILE *srcf, FILE *dstf, bool ctrl, bool color, bool mid);
 
 const char *program_path;
 const char *program_name;
@@ -64,6 +64,7 @@ FILE *dbgprint_fh = NULL;
 bool verbose = false;
 bool debug   = false;
 
+static bool ctrl         = false;
 static bool show_midline = false;
 
 static struct option long_options[] = {
@@ -71,6 +72,7 @@ static struct option long_options[] = {
     {"version",        no_argument,       0,  'V'},
     {"verbose",        no_argument,       0,  'v'},
     {"debug",          no_argument,       0,  'd'},
+    {"ctrl",           no_argument,       0,  'c'},
     {"midline",        no_argument,       0,  'm'},
     {0, 0, 0, 0}
 };
@@ -80,6 +82,8 @@ static const char usage_text[] =
     "  --help|-h|-?         Show this help message and exit\n"
     "  --version            Show version information and exit\n"
     "  --verbose|-v         verbose\n"
+    "  --ctrl|c             Tell wdiff to use control characters\n"
+    "                       for start/end insert/delete markers\n"
     "  --debug|-d           debug\n"
     "  --midline|-m         Show line of +/- in the middle\n"
     "\n"
@@ -156,6 +160,7 @@ main(int argc, char **argv)
 
     (void)optarg;       // So far, no options take arguments.
 
+    set_eprint_fh();
     program_path = *argv;
     program_name = sname(program_path);
     option_index = 0;
@@ -171,7 +176,7 @@ main(int argc, char **argv)
         }
 
         this_option_optind = optind ? optind : 1;
-        optc = getopt_long(argc, argv, "+hVdvm", long_options, &option_index);
+        optc = getopt_long(argc, argv, "+hVdvcm", long_options, &option_index);
         if (optc == -1) {
             break;
         }
@@ -195,6 +200,9 @@ main(int argc, char **argv)
             break;
         case 'v':
             verbose = true;
+            break;
+        case 'c':
+            ctrl = true;
             break;
         case 'm':
             show_midline = true;
@@ -238,7 +246,7 @@ main(int argc, char **argv)
         exit(1);
     }
 
-    wdiff_align(stdin, stdout, true, show_midline);
+    wdiff_align(stdin, stdout, ctrl, true, show_midline);
 
     if (rv != 0) {
         exit(rv);
